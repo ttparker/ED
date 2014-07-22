@@ -51,6 +51,12 @@ int main()
               lSys = 4;
     const std::vector<double> j = {0., 1., 2., 3., 0., 0., 0.};
                                                         // first term must be 0
+    #define u1symmetry
+    #ifdef u1symmetry
+        const int targetQNum = 4;
+        const std::vector<int> oneSiteQNums = {1, -1};
+        std::vector<int> qNumList = oneSiteQNums;
+    #endif
     sigmaplus.reserve(VectorXd::Constant(d, 1));
     sigmaplus.insert(0, 1) = 1.;
     sigmaplus.makeCompressed();
@@ -79,8 +85,33 @@ int main()
                     ham += kp(id(pow(d, site - couplingDist + 1)),
                               couplings[couplingDist]);
             };
+        #ifdef u1symmetry
+            std::vector<int> newQNumList;
+            newQNumList.reserve(qNumList.size() * d);
+            for (int newQNum : oneSiteQNums)
+                for(int oldQNum : qNumList)
+                    newQNumList.push_back(oldQNum + newQNum);
+            qNumList = newQNumList;
+        #endif
     };
-    std::cout << ham << std::endl;
+    #ifdef u1symmetry
+        int sectorSize = std::count(qNumList.begin(), qNumList.end(),
+                                    targetQNum);
+        std::vector<int> sectorPositions;
+        sectorPositions.reserve(sectorSize);
+        for(auto firstElement = qNumList.begin(),
+            qNumListElement = firstElement, end = qNumList.end();
+            qNumListElement != end; qNumListElement++)
+            if(*qNumListElement == targetQNum)
+                sectorPositions.push_back(qNumListElement - firstElement);
+        sparseMat sector(sectorSize, sectorSize);
+        sector.reserve(VectorXd::Constant(sectorSize, sectorSize));
+        for(int j = 0; j < sectorSize; j++)
+            for(int i = 0; i < sectorSize; i++)
+                sector.insert(i, j) = ham.coeffRef(sectorPositions[i],
+                                                sectorPositions[j]);
+        sector.makeCompressed();
+    #endif
     
     return 0;
 };
