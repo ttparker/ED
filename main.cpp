@@ -9,12 +9,12 @@ typedef Eigen::Matrix<scalarType, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajo
 
 using namespace Eigen;
 
-const int d = 2;
+const int d = 2;                           // size of single-site Hilbert space
 sparseMat sigmaplus(d, d),
           sigmaminus(d, d),
           sigmaz(d, d);
 
-sparseMat id(int size)
+sparseMat id(int size)                             // return an identity matrix
 {
     sparseMat id(size, size);
     id.reserve(VectorXd::Constant(size, 1));
@@ -23,7 +23,7 @@ sparseMat id(int size)
     return id;
 };
 
-sparseMat createNthHeis(int dist)             // add support for external field
+sparseMat createNthHeis(int dist)       // TODO: add support for external field
 {
     if(dist == 1)
     {
@@ -73,15 +73,17 @@ double oneSiteExpValue(Matrix<scalarType, d, d> op, int site, rmMatrixX_t psi,
 
 int main()
 {
-    const int farthestNeighborCoupling = 6,
-              lSys = 4;
-    const std::vector<double> j = {0., 1., 2., 3., 0., 0., 0.};
-                                                        // first term must be 0
-    const double lancTolerance = 1.e-6;
-    #define u1symmetry
+    // ************* Hamiltonian parameters
+    const int farthestNeighborCoupling = 2,
+              lSys = 12;
+    const std::vector<double> j = {0., 1., 2.};
+    // strength of 1st, 2nd, etc. nearest neigbor Heisenberg couplings         // TODO: first term must be 0
+    const double lancTolerance = 1.e-6;                // allowed Lanczos error
+    #define u1symmetry   // does system have U(1) symmetry? If not, comment out
     #ifdef u1symmetry
-        const int targetQNum = 2;
-        const std::vector<int> oneSiteQNums = {1, -1};
+        const int targetQNum = 4;  // targeted symmetry sector (e.g. total S^z)
+        const std::vector<int> oneSiteQNums = {1, -1};              // hbar = 2
+    // ************* end Hamiltonian parameters
         std::vector<int> qNumList = oneSiteQNums;
     #endif
     sigmaplus.reserve(VectorXd::Constant(d, 1));
@@ -93,17 +95,21 @@ int main()
     sigmaz.reserve(VectorXd::Constant(d, 1));
     sigmaz.insert(0, 0) = 1.;
     sigmaz.insert(1, 1) = -1.;
+    
+    // create coupling operators
     std::vector<sparseMat> couplings(farthestNeighborCoupling + 1);
     for(int i = 0, end = j.size(); i < end; i++)
         if(j[i])
             couplings[i] = j[i] * createNthHeis(i);
+    
+    // create Hamiltonian
     sparseMat ham(d, d);
-    for(int site = 0; site < lSys - 1; site++)
+    for(int site = 0; site < lSys - 1; site++)               // add on new site
     {
         sparseMat tempHam = kp(ham, id(d));
         ham = tempHam;
         for(int couplingDist = 1; couplingDist <= farthestNeighborCoupling;
-            couplingDist++)
+            couplingDist++)                     // add in couplings to new site
             if(j[couplingDist])
             {
                 if(couplingDist == site + 1)
@@ -121,6 +127,8 @@ int main()
             qNumList = newQNumList;
         #endif
     };
+    
+    // run Lanczos on Hamiltonian to find ground state
     std::cout << "Starting Lanczos..." << std::endl;
     #ifdef u1symmetry
         int sectorSize = std::count(qNumList.begin(), qNumList.end(),
@@ -148,8 +156,9 @@ int main()
         VectorX_t groundState = VectorX_t::Random(ham.rows()).normalized();
         double gsEnergy = lanczos(ham, groundState, lancTolerance);
     #endif
-    std::cout << "Ground state energy: " << gsEnergy << std::endl;
+    std::cout << "Ground state energy density: " << gsEnergy / lSys << std::endl;
     
+    // calculate expectation values of one-site observables (e.g. sigma_z):
     Matrix<scalarType, d, d> op;
     op << 1.,  0.,
           0., -1.;
