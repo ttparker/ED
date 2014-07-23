@@ -10,12 +10,14 @@
 
 #ifdef realHamiltonian
     #define scalarType double
+    #define re
+    #include <cmath>
 #else
     #define scalarType std::complex<double>
+    #define re std::real
 #endif
 
 typedef Eigen::SparseMatrix<scalarType> sparseMat;
-typedef Eigen::Triplet<scalarType> trip;
 typedef Eigen::Matrix<scalarType, Eigen::Dynamic, 1> VectorX_t;
 
 double lanczos(const sparseMat& mat, VectorX_t& seed, double lancTolerance);

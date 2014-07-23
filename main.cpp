@@ -3,6 +3,10 @@
 
 #define kp KroneckerProductSparse<sparseMat, sparseMat>
 
+typedef Eigen::Triplet<scalarType> trip;
+typedef Eigen::Matrix<scalarType, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+    rmMatrixX_t;
+
 using namespace Eigen;
 
 const int d = 2;
@@ -40,6 +44,33 @@ sparseMat createNthHeis(int dist)             // add support for external field
     };
 };
 
+double oneSiteExpValue(Matrix<scalarType, d, d> op, int site, rmMatrixX_t psi,
+                       int lSys)
+{
+    int psiDim = psi.size();
+    if(site == 0)
+    {
+        psi.resize(d, psiDim / d);
+        return re((op * psi * psi.adjoint()).trace());
+    }
+    else if(site == lSys - 1)
+    {
+        psi.resize(psiDim / d, d);
+        return re((psi * op.adjoint() * psi.adjoint()).trace());
+    }
+    else
+    {
+        int aSize = pow(d, site),
+            cSize = pow(d, lSys - site - 1);
+        psi.resize(aSize * d, cSize);
+        rmMatrixX_t psiPsiDag = psi * psi.adjoint();
+        psiPsiDag.resize(aSize * d * aSize, d);
+        rmMatrixX_t psiPsiDagO = psiPsiDag * op;
+        psiPsiDagO.resize(aSize * d, aSize * d);
+        return re(psiPsiDagO.trace());
+    };
+};
+
 int main()
 {
     const int farthestNeighborCoupling = 6,
@@ -49,7 +80,7 @@ int main()
     const double lancTolerance = 1.e-6;
     #define u1symmetry
     #ifdef u1symmetry
-        const int targetQNum = 0;
+        const int targetQNum = 2;
         const std::vector<int> oneSiteQNums = {1, -1};
         std::vector<int> qNumList = oneSiteQNums;
     #endif
@@ -90,7 +121,7 @@ int main()
             qNumList = newQNumList;
         #endif
     };
-    std::cout << ham << std::endl;
+    std::cout << "Starting Lanczos..." << std::endl;
     #ifdef u1symmetry
         int sectorSize = std::count(qNumList.begin(), qNumList.end(),
                                     targetQNum);
@@ -102,18 +133,30 @@ int main()
             if(*qNumListElement == targetQNum)
                 sectorPositions.push_back(qNumListElement - firstElement);
         sparseMat sector(sectorSize, sectorSize);
-        sector.reserve(VectorXd::Constant(sectorSize, sectorSize));
+        sector.reserve(VectorX_t::Constant(sectorSize, sectorSize));
         for(int j = 0; j < sectorSize; j++)
             for(int i = 0; i < sectorSize; i++)
                 sector.insert(i, j) = ham.coeffRef(sectorPositions[i],
                                                    sectorPositions[j]);
         sector.makeCompressed();
-        std::cout << sector << std::endl << "Starting Lanczos..." << std::endl;
-        VectorXd seed = VectorXd::Random(sectorSize).normalized();
-        std::cout << "Ground state energy: "
-                  << lanczos(sector, seed, lancTolerance) << "\nGround state:\n"
-                  << seed << std::endl;
+        VectorX_t seed = VectorX_t::Random(sectorSize).normalized();
+        double gsEnergy = lanczos(sector, seed, lancTolerance);
+        VectorX_t groundState = VectorX_t::Zero(ham.rows());
+        for(int i = 0; i < sectorSize; i++)
+            groundState(sectorPositions[i]) = seed(i);
+    #else
+        VectorX_t groundState = VectorX_t::Random(ham.rows()).normalized();
+        double gsEnergy = lanczos(ham, groundState, lancTolerance);
     #endif
+    std::cout << "Ground state energy: " << gsEnergy << std::endl;
+    
+    Matrix<scalarType, d, d> op;
+    op << 1.,  0.,
+          0., -1.;
+    std::cout << "One-site expectation values:" << std::endl;
+    for(int i = 0; i < lSys; i++)
+        std::cout << oneSiteExpValue(op, i, groundState, lSys) << " ";
+    std::cout << std::endl;
     
     return 0;
 };

@@ -1,15 +1,5 @@
 #include "Definitions.h"
 
-#ifdef realHamiltonian
-    #define re
-    #include <cmath>
-#endif
-#ifdef complexHamiltonian
-    #define re std::real
-#endif
-
-typedef Eigen::Matrix<scalarType, Eigen::Dynamic, Eigen::Dynamic> MatrixX_t;
-
 extern "C"
 {
     void dstemr_(char* JOBZ, char* RANGE, int* N, double* D, double* E,
@@ -35,7 +25,7 @@ double lanczos(const sparseMat& mat, VectorX_t& seed, double lancTolerance)
     a.reserve(minIters);
     b.reserve(minIters);
     VectorX_t x = seed;
-    MatrixX_t basisVecs = x;
+    Matrix<scalarType, Dynamic, Dynamic> basisVecs = x;
     x.noalias() = mat * basisVecs;
     a.push_back(re(seed.dot(x)));
     b.push_back(0.);
