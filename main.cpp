@@ -1,12 +1,7 @@
-#include <iostream>
-#include <vector>
-#include <Eigen/Sparse>
+#include "Definitions.h"
 #include <unsupported/Eigen/KroneckerProduct>
 
-#define kp KroneckerProductSparse<Eigen::SparseMatrix<double>, Eigen::SparseMatrix<double>>
-
-typedef Eigen::SparseMatrix<double> sparseMat;
-typedef Eigen::Triplet<double> trip;
+#define kp KroneckerProductSparse<sparseMat, sparseMat>
 
 using namespace Eigen;
 
@@ -51,9 +46,10 @@ int main()
               lSys = 4;
     const std::vector<double> j = {0., 1., 2., 3., 0., 0., 0.};
                                                         // first term must be 0
+    const double lancTolerance = 1.e-6;
     #define u1symmetry
     #ifdef u1symmetry
-        const int targetQNum = 4;
+        const int targetQNum = 0;
         const std::vector<int> oneSiteQNums = {1, -1};
         std::vector<int> qNumList = oneSiteQNums;
     #endif
@@ -94,6 +90,7 @@ int main()
             qNumList = newQNumList;
         #endif
     };
+    std::cout << ham << std::endl;
     #ifdef u1symmetry
         int sectorSize = std::count(qNumList.begin(), qNumList.end(),
                                     targetQNum);
@@ -109,8 +106,13 @@ int main()
         for(int j = 0; j < sectorSize; j++)
             for(int i = 0; i < sectorSize; i++)
                 sector.insert(i, j) = ham.coeffRef(sectorPositions[i],
-                                                sectorPositions[j]);
+                                                   sectorPositions[j]);
         sector.makeCompressed();
+        std::cout << sector << std::endl << "Starting Lanczos..." << std::endl;
+        VectorXd seed = VectorXd::Random(sectorSize).normalized();
+        std::cout << "Ground state energy: "
+                  << lanczos(sector, seed, lancTolerance) << "\nGround state:\n"
+                  << seed << std::endl;
     #endif
     
     return 0;
