@@ -28,13 +28,9 @@ sparseMat createNthCoupling(int dist)
 {
     if(dist == 1)
     {
-        sparseMat nnCoupling(d * d, d * d);
-        std::vector<trip> nnCouplingElementList
-            = {trip(0, 0, 1.), trip(1, 1, -1.), trip(2, 1, 2.), trip(1, 2, 2.),
-               trip(2, 2, -1.), trip(3, 3, 1.)};
-        nnCoupling.setFromTriplets(nnCouplingElementList.begin(),
-                               nnCouplingElementList.end());
-        return nnCoupling;
+        return sparseMat(kp(sigmaz, sigmaz))
+               + 2 * (sparseMat(kp(sigmaplus, sigmaminus))
+                      + sparseMat(kp(sigmaminus, sigmaplus)));
     }
     else
     {
