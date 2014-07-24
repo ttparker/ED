@@ -1,4 +1,5 @@
 #include "Definitions.h"
+#include <time.h>
 #include <unsupported/Eigen/KroneckerProduct>
 
 #define kp KroneckerProductSparse<sparseMat, sparseMat>
@@ -23,17 +24,17 @@ sparseMat id(int size)                             // return an identity matrix
     return id;
 };
 
-sparseMat createNthHeis(int dist)       // TODO: add support for external field
+sparseMat createNthCoupling(int dist)
 {
     if(dist == 1)
     {
-        sparseMat nnHeis(d * d, d * d);
-        std::vector<trip> nnHeisElementList
+        sparseMat nnCoupling(d * d, d * d);
+        std::vector<trip> nnCouplingElementList
             = {trip(0, 0, 1.), trip(1, 1, -1.), trip(2, 1, 2.), trip(1, 2, 2.),
                trip(2, 2, -1.), trip(3, 3, 1.)};
-        nnHeis.setFromTriplets(nnHeisElementList.begin(),
-                               nnHeisElementList.end());
-        return nnHeis;
+        nnCoupling.setFromTriplets(nnCouplingElementList.begin(),
+                               nnCouplingElementList.end());
+        return nnCoupling;
     }
     else
     {
@@ -75,17 +76,22 @@ int main()
 {
     // ************* Hamiltonian parameters
     const int farthestNeighborCoupling = 2,
-              lSys = 12;
-    const std::vector<double> j = {0., 1., 2.};
-    // strength of 1st, 2nd, etc. nearest neigbor Heisenberg couplings         // TODO: first term must be 0
+              lSys = 10;
+    const std::vector<double> j = {0., 1., 1.};
+      // strength of 1st-, 2nd-, etc. nearest-neigbor couplings
+      // If system has U(1) symmetry, zeroth term not accessed. If not, gives h
     const double lancTolerance = 1.e-6;                // allowed Lanczos error
-    #define u1symmetry   // does system have U(1) symmetry? If not, comment out
-    #ifdef u1symmetry
+    #define u1Symmetry        // system have U(1) symmetry? If not, comment out
+//    #define externalField
+         // system in external field with NO U(1) symmetry? If not, comment out
+    #ifdef u1Symmetry
         const int targetQNum = 4;  // targeted symmetry sector (e.g. total S^z)
         const std::vector<int> oneSiteQNums = {1, -1};              // hbar = 2
     // ************* end Hamiltonian parameters
         std::vector<int> qNumList = oneSiteQNums;
     #endif
+    
+    clock_t start = clock();
     sigmaplus.reserve(VectorXd::Constant(d, 1));
     sigmaplus.insert(0, 1) = 1.;
     sigmaplus.makeCompressed();
@@ -98,16 +104,26 @@ int main()
     
     // create coupling operators
     std::vector<sparseMat> couplings(farthestNeighborCoupling + 1);
-    for(int i = 0, end = j.size(); i < end; i++)
+    for(int i = 1, end = j.size(); i < end; i++)
         if(j[i])
-            couplings[i] = j[i] * createNthHeis(i);
+            couplings[i] = j[i] * createNthCoupling(i);
     
     // create Hamiltonian
     sparseMat ham(d, d);
+    #ifdef externalField
+        sparseMat h1(d, d);
+        h1.reserve(VectorXd::Constant(d, 1));
+        h1.insert(0, 0) = -j[0];
+        h1.insert(1, 1) =  j[0];
+        ham = h1;
+    #endif
     for(int site = 0; site < lSys - 1; site++)               // add on new site
     {
         sparseMat tempHam = kp(ham, id(d));
         ham = tempHam;
+        #ifdef externalField
+            ham += kp(id(pow(d, site + 1)), h1);
+        #endif
         for(int couplingDist = 1; couplingDist <= farthestNeighborCoupling;
             couplingDist++)                     // add in couplings to new site
             if(j[couplingDist])
@@ -118,7 +134,7 @@ int main()
                     ham += kp(id(pow(d, site - couplingDist + 1)),
                               couplings[couplingDist]);
             };
-        #ifdef u1symmetry
+        #ifdef u1Symmetry
             std::vector<int> newQNumList;
             newQNumList.reserve(qNumList.size() * d);
             for (int newQNum : oneSiteQNums)
@@ -130,7 +146,7 @@ int main()
     
     // run Lanczos on Hamiltonian to find ground state
     std::cout << "Starting Lanczos..." << std::endl;
-    #ifdef u1symmetry
+    #ifdef u1Symmetry
         int sectorSize = std::count(qNumList.begin(), qNumList.end(),
                                     targetQNum);
         std::vector<int> sectorPositions;
@@ -164,8 +180,11 @@ int main()
           0., -1.;
     std::cout << "One-site expectation values:" << std::endl;
     for(int i = 0; i < lSys; i++)
-        std::cout << oneSiteExpValue(op, i, groundState, lSys) << " ";
+        std::cout << oneSiteExpValue(op, i, groundState, lSys) << std::endl;
     std::cout << std::endl;
+    clock_t stop = clock();
+    std::cout << "Done. Elapsed time: " << float(stop - start)/CLOCKS_PER_SEC
+              << " s" << std::endl;
     
     return 0;
 };
