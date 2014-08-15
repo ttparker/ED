@@ -72,11 +72,22 @@ int main()
 {
     // ************* Hamiltonian parameters
     const int farthestNeighborCoupling = 2,
-              lSys = 10;
-    const std::vector<double> j = {0., 1., 1.};
-      // strength of 1st-, 2nd-, etc. nearest-neigbor couplings
-      // If system has U(1) symmetry, zeroth term not accessed. If not, gives h
-    const double lancTolerance = 1.e-6;                // allowed Lanczos error
+              lSys = 10,
+              nSiteTypes = 3;                          // size of lattice basis
+    const std::vector<double> couplingConstants = {0., 1., 1., 1.};
+    #define h couplingConstants[0]
+    #define a couplingConstants[1]
+    #define b couplingConstants[2]
+    #define c couplingConstants[3]
+    Matrix<double, nSiteTypes, farthestNeighborCoupling + 1> j;
+     // assigns couplings to each site on basis - the row gives the basis site,
+     // the column j gives the jth-nearest-neigbor coupling constant for the
+     // bonds connecting to that basis site from behind.  The zeroth element of
+     // each row is the external field on that basis site.
+    j << h, a, 0.,
+         h, c,  b,
+         h, a,  b;                                  // diamond ladder couplings
+    const double lancTolerance = 1.e-9;                // allowed Lanczos error
     #define u1Symmetry        // system have U(1) symmetry? If not, comment out
 //    #define externalField
          // system in external field with NO U(1) symmetry? If not, comment out
@@ -99,36 +110,38 @@ int main()
     sigmaz.insert(1, 1) = -1.;
     
     // create coupling operators
-    std::vector<sparseMat> couplings(farthestNeighborCoupling + 1);
-    for(int i = 1, end = j.size(); i < end; i++)
-        if(j[i])
-            couplings[i] = j[i] * createNthCoupling(i);
+    std::vector<sparseMat> couplingOperators(farthestNeighborCoupling + 1);
+    for(int i = 1; i <= farthestNeighborCoupling; i++)
+        couplingOperators[i] = createNthCoupling(i);
     
     // create Hamiltonian
     sparseMat ham(d, d);
     #ifdef externalField
         sparseMat h1(d, d);
         h1.reserve(VectorXd::Constant(d, 1));
-        h1.insert(0, 0) = -j[0];
-        h1.insert(1, 1) =  j[0];
+        h1.insert(0, 0) = -1;
+        h1.insert(1, 1) = 1;
         ham = h1;
     #endif
     for(int site = 0; site < lSys - 1; site++)               // add on new site
     {
+        int thisSiteType = site % nSiteTypes;
         sparseMat tempHam = kp(ham, id(d));
         ham = tempHam;
         #ifdef externalField
-            ham += kp(id(pow(d, site + 1)), h1);
+            ham += kp(id(pow(d, site + 1)), j(thisSiteType, 0) * h1);
         #endif
         for(int couplingDist = 1; couplingDist <= farthestNeighborCoupling;
             couplingDist++)                     // add in couplings to new site
-            if(j[couplingDist])
+            if(j(thisSiteType, couplingDist))
             {
                 if(couplingDist == site + 1)
-                    ham += couplings[couplingDist];
+                    ham += j(thisSiteType, couplingDist)
+                           * couplingOperators[couplingDist];
                 else if(couplingDist <= site + 1)
                     ham += kp(id(pow(d, site - couplingDist + 1)),
-                              couplings[couplingDist]);
+                              j(thisSiteType, couplingDist)
+                              * couplingOperators[couplingDist]);
             };
         #ifdef u1Symmetry
             std::vector<int> newQNumList;

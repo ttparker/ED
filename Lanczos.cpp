@@ -123,5 +123,6 @@ double lanczos(const sparseMat& mat, VectorX_t& seed, double lancTolerance)
             exit(EXIT_FAILURE);
         };
     };
+    std::cout << "Lanczos iterations: " << N << std::endl;
     return W.front();
 };
