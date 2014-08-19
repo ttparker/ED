@@ -71,28 +71,28 @@ double oneSiteExpValue(Matrix<scalarType, d, d> op, int site, rmMatrixX_t psi,
 int main()
 {
     // ************* Hamiltonian parameters
-    const int farthestNeighborCoupling = 2,
-              lSys = 10,
+    const int farthestNeighborCoupling = 6,
+              lSys = 16,
               nSiteTypes = 3;                          // size of lattice basis
-    const std::vector<double> couplingConstants = {0., 1., 1., 1.};
+    const std::vector<double> couplingConstants = {0., 1., -1., 1.};
     #define h couplingConstants[0]
-    #define a couplingConstants[1]
-    #define b couplingConstants[2]
-    #define c couplingConstants[3]
+    #define jprime couplingConstants[1]
+    #define j1 couplingConstants[2]
+    #define j2 couplingConstants[3]
     Matrix<double, nSiteTypes, farthestNeighborCoupling + 1> j;
      // assigns couplings to each site on basis - the row gives the basis site,
      // the column j gives the jth-nearest-neigbor coupling constant for the
      // bonds connecting to that basis site from behind.  The zeroth element of
      // each row is the external field on that basis site.
-    j << h, a, 0.,
-         h, c,  b,
-         h, a,  b;                                  // diamond ladder couplings
+    j << h, jprime,     0., j1, 0., 0., j2,
+         h,     0., jprime, j1, 0., 0., j2,
+         h, jprime, jprime, 0., 0., 0., 0.;         // diamond ladder couplings
     const double lancTolerance = 1.e-9;                // allowed Lanczos error
     #define u1Symmetry        // system have U(1) symmetry? If not, comment out
 //    #define externalField
          // system in external field with NO U(1) symmetry? If not, comment out
     #ifdef u1Symmetry
-        const int targetQNum = 4;  // targeted symmetry sector (e.g. total S^z)
+        const int targetQNum = 6;  // targeted symmetry sector (e.g. total S^z)
         const std::vector<int> oneSiteQNums = {1, -1};              // hbar = 2
     // ************* end Hamiltonian parameters
         std::vector<int> qNumList = oneSiteQNums;
