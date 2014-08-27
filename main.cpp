@@ -25,21 +25,17 @@ sparseMat id(int sites)                            // return an identity matrix
     return id;
 };
 
-sparseMat createNthCoupling(int dist)
+std::vector<int> vectorProductSum(const std::vector<int>& first,
+                                  const std::vector<int>& second)
 {
-    if(dist == 1)
-    {
-        return sparseMat(kp(sigmaz, sigmaz))
-               + 2 * (sparseMat(kp(sigmaplus, sigmaminus))
-                      + sparseMat(kp(sigmaminus, sigmaplus)));
-    }
-    else
-    {
-        sparseMat middleId = id(dist - 1);
-        return sparseMat(kp(kp(sigmaz, middleId), sigmaz))
-               + 2. * (sparseMat(kp(kp(sigmaplus, middleId), sigmaminus))
-                       + sparseMat(kp(kp(sigmaminus, middleId), sigmaplus)));
-    };
+    std::vector<int> prod;
+    int firstSize = first.size(),
+        secondSize = second.size();
+    prod.reserve(firstSize * secondSize);
+    for(int i = 0; i < firstSize; i++)
+        for(int j = 0; j < secondSize; j++)
+            prod.push_back(first[i] + second[j]);
+    return prod;
 };
 
 double oneSiteExpValue(Matrix<scalarType, d, d> op, int site, rmMatrixX_t psi,
@@ -73,7 +69,7 @@ int main()
 {
     // ************* Hamiltonian parameters
     const int farthestNeighborCoupling = 6,
-              lSys = 16,
+              lSys = 10,
               nSiteTypes = 3;                          // size of lattice basis
     const std::vector<double> couplingConstants = {0., 1., -1., 1.};
     #define h couplingConstants[0]
@@ -93,7 +89,7 @@ int main()
 //    #define externalField
          // system in external field with NO U(1) symmetry? If not, comment out
     #ifdef u1Symmetry
-        const int targetQNum = 6;  // targeted symmetry sector (e.g. total S^z)
+        const int targetQNum = 0;  // targeted symmetry sector (e.g. total S^z)
         const std::vector<int> oneSiteQNums = {1, -1};              // hbar = 2
     // ************* end Hamiltonian parameters
         std::vector<int> qNumList = oneSiteQNums;
@@ -111,9 +107,20 @@ int main()
     sigmaz.insert(1, 1) = -1.;
     
     // create coupling operators
-    std::vector<sparseMat> couplingOperators(farthestNeighborCoupling + 1);
-    for(int i = 1; i <= farthestNeighborCoupling; i++)
-        couplingOperators[i] = createNthCoupling(i);
+    const int longestCouplingOperator = lSys / 2 - 1 + farthestNeighborCoupling;
+    std::vector<sparseMat> couplingOperators(longestCouplingOperator + 1);
+    couplingOperators[1] = sparseMat(kp(sigmaz, sigmaz))
+                           + 2 * (sparseMat(kp(sigmaplus, sigmaminus))
+                                  + sparseMat(kp(sigmaminus, sigmaplus)));
+    for(int i = 2; i <= longestCouplingOperator; i++)
+    {
+        sparseMat middleId = id(i - 1);
+        couplingOperators[i] = sparseMat(kp(kp(sigmaz, middleId), sigmaz))
+                               + 2. * (sparseMat(kp(kp(sigmaplus, middleId),
+                                                    sigmaminus))
+                                       + sparseMat(kp(kp(sigmaminus, middleId),
+                                                      sigmaplus)));
+    };
     
     // create Hamiltonian
     sparseMat ham(d, d);
@@ -124,76 +131,88 @@ int main()
         h1.insert(1, 1) = 1;
         ham = h1;
     #endif
+    VectorX_t groundState;
     for(int site = 0; site < lSys / 2 - 1; site++)           // add on new site
     {
-        int thisSiteType = site % nSiteTypes;
         sparseMat tempHam = kp(ham, id(1));
         ham = tempHam;
+        int thisSiteType = site % nSiteTypes;
         #ifdef externalField
             ham += kp(id(site + 1), j(thisSiteType, 0) * h1);
         #endif
-        for(int couplingDist = 1; couplingDist <= farthestNeighborCoupling;
-            couplingDist++)                     // add in couplings to new site
-            if(j(thisSiteType, couplingDist))
-            {
-                if(couplingDist == site + 1)
-                    ham += j(thisSiteType, couplingDist)
-                           * couplingOperators[couplingDist];
-                else if(couplingDist <= site + 1)
-                    ham += kp(id(site - couplingDist + 1),
-                              j(thisSiteType, couplingDist)
-                              * couplingOperators[couplingDist]);
-            };
-        
-        // create the superblock:
-        sparseMat hSuper = kp(ham, id(site + 2))
-                           + kp(id(site + 2), ham);
-        int nextSiteType = (site + 1) % nSiteTypes;
-        sparseMat centerBondCouplings(pow(d, site + 3));
-        for(int i = 1; i <= farthestNeighborCoupling; i++)
-            if(j(nextSiteType, i))
-                centerBondCouplings += j(nextSiteType, i)
-                                       * createNthCoupling(site + 3 - i);
-        hSuper += kp(id(site + 1), centerBondCouplings);
+        for(int couplingDist = 1,
+                end = std::min(farthestNeighborCoupling, site + 1);
+            couplingDist <= end; couplingDist++) // add in couplings to new site
+        {
+            double thisJ = j(thisSiteType, couplingDist);
+            if(thisJ)
+                ham += (couplingDist == site + 1 ?
+                        sparseMat(thisJ * couplingOperators[couplingDist]) :
+                        sparseMat(kp(id(site + 1 - couplingDist),
+                                     thisJ * couplingOperators[couplingDist])));
+        };
         #ifdef u1Symmetry
-            std::vector<int> newQNumList;
-            newQNumList.reserve(qNumList.size() * d);
-            for(int oldQNum : qNumList)
-                for (int newQNum : oneSiteQNums)
-                    newQNumList.push_back(oldQNum + newQNum);
-            qNumList = newQNumList;
+            qNumList = vectorProductSum(qNumList, oneSiteQNums);
         #endif
         
-    
-    // run Lanczos on Hamiltonian to find ground state
-    std::cout << "Starting Lanczos..." << std::endl;
-    #ifdef u1Symmetry
-        int sectorSize = std::count(qNumList.begin(), qNumList.end(),
-                                    targetQNum);
-        std::vector<int> sectorPositions;
-        sectorPositions.reserve(sectorSize);
-        for(auto firstElement = qNumList.begin(),
-            qNumListElement = firstElement, end = qNumList.end();
-            qNumListElement != end; qNumListElement++)
-            if(*qNumListElement == targetQNum)
-                sectorPositions.push_back(qNumListElement - firstElement);
-        sparseMat sector(sectorSize, sectorSize);
-        sector.reserve(VectorX_t::Constant(sectorSize, sectorSize));
-        for(int j = 0; j < sectorSize; j++)
+        // create the superblock:
+        sparseMat hSuper = sparseMat(kp(ham, id(site + 2)))
+                           + sparseMat(kp(id(site + 2), ham));
+        for(int i = std::max(0, site + 2 - farthestNeighborCoupling),
+            end = site + 2; i < end; i++)
+        {
+            int couplingMatSize = pow(d, 2 * site + 4 - i);
+            sparseMat centerBondCouplings(couplingMatSize, couplingMatSize);
+            // the bonds that start at site i and cross the center of the system
+            for(int k = site + 2 - i,
+                end = std::min(2 * site + 3 - i, farthestNeighborCoupling);
+                k <= end; k++)
+            {
+                double thisJ = j((i + k - 1) % nSiteTypes, k);
+                if(thisJ)
+                    centerBondCouplings
+                        += kp(thisJ * couplingOperators[3 * site + 5 - 2 * i - k],
+                              id(i + k - site - 2));
+            };
+            hSuper += (i == 0 ? centerBondCouplings : kp(id(i),
+                                                         centerBondCouplings));
+        };
+        #ifdef u1Symmetry
+            std::vector<int> hSuperQNumList = vectorProductSum(qNumList, qNumList);
+        #endif
+        
+        // run Lanczos on Hamiltonian to find ground state
+        std::cout << "Starting Lanczos..." << std::endl;
+        #ifdef u1Symmetry
+            int sectorSize = std::count(hSuperQNumList.begin(),
+                                        hSuperQNumList.end(), targetQNum);
+            std::vector<int> sectorPositions;
+            sectorPositions.reserve(sectorSize);
+            for(auto firstElement = hSuperQNumList.begin(),
+                hSuperQNumListElement = firstElement,
+                end = hSuperQNumList.end(); hSuperQNumListElement != end;
+                hSuperQNumListElement++)
+                if(*hSuperQNumListElement == targetQNum)
+                    sectorPositions.push_back(hSuperQNumListElement
+                                              - firstElement);
+            sparseMat sector(sectorSize, sectorSize);
+            sector.reserve(VectorX_t::Constant(sectorSize, sectorSize));
+            for(int j = 0; j < sectorSize; j++)
+                for(int i = 0; i < sectorSize; i++)
+                    sector.insert(i, j) = hSuper.coeffRef(sectorPositions[i],
+                                                          sectorPositions[j]);
+            sector.makeCompressed();
+            VectorX_t seed = VectorX_t::Random(sectorSize).normalized();
+            double gsEnergy = lanczos(sector, seed, lancTolerance);
+            groundState = VectorX_t::Zero(hSuper.rows());
             for(int i = 0; i < sectorSize; i++)
-                sector.insert(i, j) = ham.coeffRef(sectorPositions[i],
-                                                   sectorPositions[j]);
-        sector.makeCompressed();
-        VectorX_t seed = VectorX_t::Random(sectorSize).normalized();
-        double gsEnergy = lanczos(sector, seed, lancTolerance);
-        VectorX_t groundState = VectorX_t::Zero(ham.rows());
-        for(int i = 0; i < sectorSize; i++)
-            groundState(sectorPositions[i]) = seed(i);
-    #else
-        VectorX_t groundState = VectorX_t::Random(ham.rows()).normalized();
-        double gsEnergy = lanczos(ham, groundState, lancTolerance);
-    #endif
-    std::cout << "Ground state energy density: " << gsEnergy / lSys << std::endl;
+                groundState(sectorPositions[i]) = seed(i);
+        #else
+            groundState = VectorX_t::Random(hSuper.rows()).normalized();
+            double gsEnergy = lanczos(hSuper, groundState, lancTolerance);
+        #endif
+        std::cout << "Ground state energy density: " << gsEnergy / lSys << std::endl;
+    };
     
     // calculate expectation values of one-site observables (e.g. sigma_z):
     Matrix<scalarType, d, d> op;
