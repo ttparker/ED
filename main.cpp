@@ -15,8 +15,9 @@ sparseMat sigmaplus(d, d),
           sigmaminus(d, d),
           sigmaz(d, d);
 
-sparseMat id(int size)                             // return an identity matrix
+sparseMat id(int sites)                            // return an identity matrix
 {
+    int size = pow(d, sites);
     sparseMat id(size, size);
     id.reserve(VectorXd::Constant(size, 1));
     for(int i = 0; i < size; i++)
@@ -34,7 +35,7 @@ sparseMat createNthCoupling(int dist)
     }
     else
     {
-        sparseMat middleId = id(pow(d, dist - 1));
+        sparseMat middleId = id(dist - 1);
         return sparseMat(kp(kp(sigmaz, middleId), sigmaz))
                + 2. * (sparseMat(kp(kp(sigmaplus, middleId), sigmaminus))
                        + sparseMat(kp(kp(sigmaminus, middleId), sigmaplus)));
@@ -123,13 +124,13 @@ int main()
         h1.insert(1, 1) = 1;
         ham = h1;
     #endif
-    for(int site = 0; site < lSys - 1; site++)               // add on new site
+    for(int site = 0; site < lSys / 2 - 1; site++)           // add on new site
     {
         int thisSiteType = site % nSiteTypes;
-        sparseMat tempHam = kp(ham, id(d));
+        sparseMat tempHam = kp(ham, id(1));
         ham = tempHam;
         #ifdef externalField
-            ham += kp(id(pow(d, site + 1)), j(thisSiteType, 0) * h1);
+            ham += kp(id(site + 1), j(thisSiteType, 0) * h1);
         #endif
         for(int couplingDist = 1; couplingDist <= farthestNeighborCoupling;
             couplingDist++)                     // add in couplings to new site
@@ -139,10 +140,21 @@ int main()
                     ham += j(thisSiteType, couplingDist)
                            * couplingOperators[couplingDist];
                 else if(couplingDist <= site + 1)
-                    ham += kp(id(pow(d, site - couplingDist + 1)),
+                    ham += kp(id(site - couplingDist + 1),
                               j(thisSiteType, couplingDist)
                               * couplingOperators[couplingDist]);
             };
+        
+        // create the superblock:
+        sparseMat hSuper = kp(ham, id(site + 2))
+                           + kp(id(site + 2), ham);
+        int nextSiteType = (site + 1) % nSiteTypes;
+        sparseMat centerBondCouplings(pow(d, site + 3));
+        for(int i = 1; i <= farthestNeighborCoupling; i++)
+            if(j(nextSiteType, i))
+                centerBondCouplings += j(nextSiteType, i)
+                                       * createNthCoupling(site + 3 - i);
+        hSuper += kp(id(site + 1), centerBondCouplings);
         #ifdef u1Symmetry
             std::vector<int> newQNumList;
             newQNumList.reserve(qNumList.size() * d);
@@ -151,7 +163,7 @@ int main()
                     newQNumList.push_back(oldQNum + newQNum);
             qNumList = newQNumList;
         #endif
-    };
+        
     
     // run Lanczos on Hamiltonian to find ground state
     std::cout << "Starting Lanczos..." << std::endl;
