@@ -133,8 +133,8 @@ int main()
         #ifdef u1Symmetry
             std::vector<int> newQNumList;
             newQNumList.reserve(qNumList.size() * d);
-            for (int newQNum : oneSiteQNums)
-                for(int oldQNum : qNumList)
+            for(int oldQNum : qNumList)
+                for (int newQNum : oneSiteQNums)
                     newQNumList.push_back(oldQNum + newQNum);
             qNumList = newQNumList;
         #endif
