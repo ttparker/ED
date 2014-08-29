@@ -12,6 +12,8 @@ using namespace Eigen;
 
 double lanczos(const sparseMat& mat, VectorX_t& seed, double lancTolerance)
 {
+    std::ofstream fileout("LancInfo");
+    fileout << "Entered the Lanczos" << std::endl;
     const int globalMinLancIters = 3,
               globalMaxLancIters = 100;
     const double fallbackLancTolerance = 1.e-4;
@@ -62,10 +64,12 @@ double lanczos(const sparseMat& mat, VectorX_t& seed, double lancTolerance)
           // change in ground state vector across subsequent Lanczos iterations
     do
     {
+        fileout << "Starting Lanczos iteration " << N << std::endl;
         i++;
         oldGS = seed;
         
         // Lanczos stage 1: Lanczos iteration
+        fileout << "Starting Lanczos stage 1..." << std::endl;
         x -= a[i - 1] * basisVecs.col(i - 1);
         b.push_back(x.norm());
         basisVecs.conservativeResize(NoChange, i + 1);
@@ -74,6 +78,7 @@ double lanczos(const sparseMat& mat, VectorX_t& seed, double lancTolerance)
         a.push_back(re(basisVecs.col(i).dot(x)));
         
         // Lanczos stage 2: diagonalize tridiagonal matrix
+        fileout << "Starting Lanczos stage 2..." << std::endl;
         N++;
         D = a;
         E.reserve(N);
@@ -101,8 +106,9 @@ double lanczos(const sparseMat& mat, VectorX_t& seed, double lancTolerance)
     if(N == maxIters && gStateDiff > lancTolerance)
                           // check if last iteration converges to an eigenstate
     {
-        double gStateError
-            = std::abs(1 - std::abs(seed.dot((mat * seed).normalized())));
+        double gStateError = std::abs(1 - std::abs(seed.col(0)
+                                                   .dot((mat * seed).col(0)
+                                                        .normalized())));
         std::cout << "Warning: final Lanczos iteration reached. The inner "
                   << "product of the final approximate ground state and its "
                   << "normalized image differs from 1 by " << gStateError
@@ -111,18 +117,9 @@ double lanczos(const sparseMat& mat, VectorX_t& seed, double lancTolerance)
         {
             std::cerr << "Lanczos algorithm failed to converge after "
                       << maxIters << " iterations." << std::endl;
-                      
-            std::cout << "a:" << std::endl;
-            for(double i : a)
-                std::cout << i << " ";
-            std::cout << "\nb:" << std::endl;
-            for(double i : b)
-                std::cout << i << " ";
-            
-                      
             exit(EXIT_FAILURE);
         };
     };
-    std::cout << "Lanczos iterations: " << N << std::endl;
+    fileout << "Lanczos converged after " << N << " iterations" << std::endl;
     return W.front();
 };

@@ -41,6 +41,8 @@ std::vector<int> vectorProductSum(const std::vector<int>& first,
 double oneSiteExpValue(Matrix<scalarType, d, d> op, int site, rmMatrixX_t psi,
                        int lSys)
 {
+    if(site >= lSys / 2)             // reflect observable into reflected basis
+        site = 3 * lSys / 2 - 1 - site;
     int psiDim = psi.size();
     if(site == 0)
     {
@@ -123,6 +125,8 @@ int main()
     };
     
     // create Hamiltonian
+    std::ofstream fileout("mainInfo");
+    fileout << "Creating Hamiltonian for site 0\n" << std::endl;
     sparseMat ham(d, d);
     #ifdef externalField
         sparseMat h1(d, d);
@@ -134,6 +138,7 @@ int main()
     VectorX_t groundState;
     for(int site = 0; site < lSys / 2 - 1; site++)           // add on new site
     {
+        fileout << "Creating Hamiltonian for site " << site + 1 << std::endl;
         sparseMat tempHam = kp(ham, id(1));
         ham = tempHam;
         int thisSiteType = site % nSiteTypes;
@@ -180,19 +185,22 @@ int main()
         #ifdef u1Symmetry
             std::vector<int> hSuperQNumList = vectorProductSum(qNumList, qNumList);
         #endif
+        fileout << "Hamiltonian for site " << site + 1 << " complete." << std::endl;
         
         // run Lanczos on Hamiltonian to find ground state
-        std::cout << "Starting Lanczos..." << std::endl;
+        fileout << "Starting Lanczos algorithm..." << std::endl;
         #ifdef u1Symmetry
+            int scaledTargetQNum = targetQNum * (site + 2) / lSys * 2;
+            fileout << "Targeting quantum number " << scaledTargetQNum << std::endl;
             int sectorSize = std::count(hSuperQNumList.begin(),
-                                        hSuperQNumList.end(), targetQNum);
+                                        hSuperQNumList.end(), scaledTargetQNum);
             std::vector<int> sectorPositions;
             sectorPositions.reserve(sectorSize);
             for(auto firstElement = hSuperQNumList.begin(),
                 hSuperQNumListElement = firstElement,
                 end = hSuperQNumList.end(); hSuperQNumListElement != end;
                 hSuperQNumListElement++)
-                if(*hSuperQNumListElement == targetQNum)
+                if(*hSuperQNumListElement == scaledTargetQNum)
                     sectorPositions.push_back(hSuperQNumListElement
                                               - firstElement);
             sparseMat sector(sectorSize, sectorSize);
@@ -211,17 +219,19 @@ int main()
             groundState = VectorX_t::Random(hSuper.rows()).normalized();
             double gsEnergy = lanczos(hSuper, groundState, lancTolerance);
         #endif
-        std::cout << "Ground state energy density: " << gsEnergy / lSys << std::endl;
+        fileout << "Ground state energy density: " << gsEnergy / lSys
+                << std::endl << std::endl;
     };
     
     // calculate expectation values of one-site observables (e.g. sigma_z):
     Matrix<scalarType, d, d> op;
     op << 1.,  0.,
           0., -1.;
-    std::cout << "One-site expectation values:" << std::endl;
+    fileout << "One-site expectation values:" << std::endl;
     for(int i = 0; i < lSys; i++)
-        std::cout << oneSiteExpValue(op, i, groundState, lSys) << std::endl;
-    std::cout << std::endl;
+        fileout << oneSiteExpValue(op, i, groundState, lSys) << std::endl;
+    fileout << std::endl;
+    fileout.close();
     clock_t stop = clock();
     std::cout << "Done. Elapsed time: " << float(stop - start)/CLOCKS_PER_SEC
               << " s" << std::endl;

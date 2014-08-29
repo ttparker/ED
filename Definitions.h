@@ -2,6 +2,7 @@
 #define DEFINITIONS_H
 
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
