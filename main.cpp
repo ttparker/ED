@@ -73,7 +73,11 @@ int main()
     // ************* Hamiltonian parameters
     const int farthestNeighborCoupling = 2,
               lSys = 10;
-    const std::vector<double> j = {0., 1., 1.};
+    std::vector<double> j;
+    j.reserve(farthestNeighborCoupling + 1);
+    j.push_back(0.);
+    j.push_back(1.);
+    j.push_back(1.);
       // strength of 1st-, 2nd-, etc. nearest-neigbor couplings
       // If system has U(1) symmetry, zeroth term not accessed. If not, gives h
     const double lancTolerance = 1.e-6;                // allowed Lanczos error
@@ -82,7 +86,10 @@ int main()
          // system in external field with NO U(1) symmetry? If not, comment out
     #ifdef u1Symmetry
         const int targetQNum = 4;  // targeted symmetry sector (e.g. total S^z)
-        const std::vector<int> oneSiteQNums = {1, -1};              // hbar = 2
+        std::vector<int> oneSiteQNums;
+        oneSiteQNums.reserve(d);
+        oneSiteQNums.push_back(1);
+        oneSiteQNums.push_back(-1);                                 // hbar = 2
     // ************* end Hamiltonian parameters
         std::vector<int> qNumList = oneSiteQNums;
     #endif
@@ -133,9 +140,9 @@ int main()
         #ifdef u1Symmetry
             std::vector<int> newQNumList;
             newQNumList.reserve(qNumList.size() * d);
-            for(int oldQNum : qNumList)
-                for (int newQNum : oneSiteQNums)
-                    newQNumList.push_back(oldQNum + newQNum);
+            for(int i = 0, end = qNumList.size(); i < end; i++)
+                for (int k = 0; k < d; k++)
+                    newQNumList.push_back(qNumList[i] + oneSiteQNums[k]);
             qNumList = newQNumList;
         #endif
     };
@@ -147,7 +154,7 @@ int main()
                                     targetQNum);
         std::vector<int> sectorPositions;
         sectorPositions.reserve(sectorSize);
-        for(auto firstElement = qNumList.begin(),
+        for(std::vector<int>::iterator firstElement = qNumList.begin(),
             qNumListElement = firstElement, end = qNumList.end();
             qNumListElement != end; qNumListElement++)
             if(*qNumListElement == targetQNum)

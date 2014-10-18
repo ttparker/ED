@@ -111,15 +111,6 @@ double lanczos(const sparseMat& mat, VectorX_t& seed, double lancTolerance)
         {
             std::cerr << "Lanczos algorithm failed to converge after "
                       << maxIters << " iterations." << std::endl;
-                      
-            std::cout << "a:" << std::endl;
-            for(double i : a)
-                std::cout << i << " ";
-            std::cout << "\nb:" << std::endl;
-            for(double i : b)
-                std::cout << i << " ";
-            
-                      
             exit(EXIT_FAILURE);
         };
     };
